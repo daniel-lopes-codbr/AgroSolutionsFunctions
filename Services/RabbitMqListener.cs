@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -11,8 +12,8 @@ public class RabbitMqListener : IHostedService, IDisposable
 {
     private readonly ILogger<RabbitMqListener> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
-    private IConnection? _connection;
-    private IModel? _channel;
+    private object? _connection;
+    private object? _channel;
     private string _queueName;
     private readonly string _apiBaseUrl;
     private readonly string _hostName;
@@ -35,11 +36,15 @@ public class RabbitMqListener : IHostedService, IDisposable
         var factory = new ConnectionFactory() { HostName = _hostName, UserName = _user, Password = _password };
         try
         {
-            _connection = factory.CreateConnection();
-            _channel = _connection.CreateModel();
-            _channel.QueueDeclare(queue: _queueName, durable: true, exclusive: false, autoDelete: false);
+            var conn = factory.CreateConnection();
+            _connection = conn;
+            var ch = conn.CreateModel();
+            _channel = ch;
+            // use dynamic to avoid compile-time dependency on IModel when package API changes
+            dynamic dch = ch;
+            dch.QueueDeclare(queue: _queueName, durable: true, exclusive: false, autoDelete: false);
 
-            var consumer = new EventingBasicConsumer(_channel);
+            var consumer = new EventingBasicConsumer(ch);
             consumer.Received += async (model, ea) =>
             {
                 var body = ea.Body.ToArray();
@@ -47,17 +52,17 @@ public class RabbitMqListener : IHostedService, IDisposable
                 try
                 {
                     await ProcessMessageAsync(message);
-                    _channel?.BasicAck(ea.DeliveryTag, false);
+                    if (_channel != null) ((dynamic)_channel).BasicAck(ea.DeliveryTag, false);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error processing RabbitMQ message");
                     // Optionally nack/requeue
-                    _channel?.BasicNack(ea.DeliveryTag, false, true);
+                    if (_channel != null) ((dynamic)_channel).BasicNack(ea.DeliveryTag, false, true);
                 }
             };
 
-            _channel.BasicConsume(queue: _queueName, autoAck: false, consumer: consumer);
+            ((dynamic)_channel).BasicConsume(queue: _queueName, autoAck: false, consumer: consumer);
             _logger.LogInformation("RabbitMQ listener started on queue {Queue}", _queueName);
         }
         catch (Exception ex)

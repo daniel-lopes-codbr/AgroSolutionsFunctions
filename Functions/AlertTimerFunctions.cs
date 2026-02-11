@@ -17,7 +17,7 @@ public class AlertTimerFunctions
 
     // Every hour at minute 0
     [Function("HourlyAlertMonitor")]
-    public async Task RunHourly([TimerTrigger("0 0 * * * *")] TimerInfo timerInfo, FunctionContext context)
+    public async Task RunHourly([TimerTrigger("0 0 * * * *")] FunctionContext context)
     {
         _logger.LogInformation("HourlyAlertMonitor triggered at {Now}", DateTime.UtcNow);
         var client = _httpFactory.CreateClient("api");
@@ -30,7 +30,7 @@ public class AlertTimerFunctions
 
     // Every day at 00:00
     [Function("DailyDeactivateAlerts")]
-    public async Task RunDaily([TimerTrigger("0 0 0 * * *")] TimerInfo timerInfo, FunctionContext context)
+    public async Task RunDaily([TimerTrigger("0 0 0 * * *")] FunctionContext context)
     {
         _logger.LogInformation("DailyDeactivateAlerts triggered at {Now}", DateTime.UtcNow);
         var client = _httpFactory.CreateClient("api");
